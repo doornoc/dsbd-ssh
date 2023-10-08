@@ -1,0 +1,3 @@
+.idea
+cmd/backend/config
+pkg/api/core/remote/remote_test.go
