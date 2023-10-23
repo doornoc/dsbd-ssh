@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+option go_package = "../pkg/api/core";
+
+package remote;
+
+service RemoteService {
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
+  rpc DisConnect(DisconnectRequest) returns (DisconnectResponse);
+  rpc Remote (stream RemoteRequest) returns (stream RemoteResponse);
+}
+
+enum Type {
+  SSH = 0;
+  TELNET = 1;
+}
+
+message Account {
+  Type type = 1;
+  string hostname = 2;
+  uint32 port = 3;
+  string username = 4;
+  string password = 5;
+}
+
+message ConnectRequest {
+  Account account = 1;
+  string template = 2;
+}
+
+message ConnectResponse {
+  string uuid = 1;
+}
+
+message DisconnectRequest {
+  string uuid = 1;
+}
+
+message DisconnectResponse {
+  bool ok = 1;
+}
+
+message RemoteRequest {
+  string uuid = 1;
+  bytes input = 2;
+}
+
+message RemoteResponse {
+  string updateTime = 1;
+  bytes output = 2;
+}

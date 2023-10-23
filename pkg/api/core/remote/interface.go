@@ -1,6 +1,9 @@
 package remote
 
-import "time"
+import (
+	"github.com/google/uuid"
+	"time"
+)
 
 type Device struct {
 	Name     string `json:"name"`
@@ -15,11 +18,13 @@ type Remote struct {
 	Type                 uint   //0:ssh, 1:telnet
 	Device               Device `json:"device"`
 	InCh                 chan []byte
-	OutCh                chan []byte
+	OutCh                map[uuid.UUID](chan []byte)
 	InCancelCh           chan struct{}
 	OutCancelCh          chan struct{}
-	InputCancelCh        chan struct{}
+	CusInCancelCh        map[uuid.UUID](chan struct{})
+	CusOutCancelCh       map[uuid.UUID](chan struct{})
 	StdoutLastUpdateTime time.Time
+	IsTemplate           bool
 	Log                  []Log
 }
 
@@ -29,7 +34,7 @@ type Log struct {
 	OutputByte []byte
 }
 
-type command struct {
+type Command struct {
 	Type    string
 	Command string
 	Code    int

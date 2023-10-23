@@ -2,7 +2,7 @@ before:
   hooks:
     - go mod tidy
 builds:
-  - main: ./cmd/backend/
+  - main: ./cmd/server/
     env:
       - CGO_ENABLED=0
     goos:

@@ -1,4 +1,4 @@
 .idea
-cmd/backend/config
+cmd/server/config
 pkg/api/core/remote/remote_test.go
-pkg/backend/cmd/test.go
+pkg/cmd/**/test.go

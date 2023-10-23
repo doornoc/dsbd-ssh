@@ -3,6 +3,7 @@ package remote
 import (
 	"bufio"
 	"bytes"
+	"github.com/google/uuid"
 	"log"
 	"strconv"
 	"strings"
@@ -14,58 +15,48 @@ var funcs = template.FuncMap{
 	"str": str,
 }
 
-func (r *Remote) TemplateApply(templateStr string) error {
-	templateArray, err := LoadTemplate(templateStr)
-	if err != nil {
-		return err
-	}
-	switch r.Type {
-	case 0:
-		go r.SSHShell()
-	}
-
-	//input := make(chan string)
-	//go InputKeyLines(input)
+func (r *Remote) Exec(uuid uuid.UUID, commands []Command) (int, error) {
 	var commandByte []byte
 	var prevCommandByte []byte
+
 InputCancel:
-	for _, templateOne := range templateArray {
+	for _, command := range commands {
 		for {
 			time.Sleep(1 * time.Second)
-			if time.Now().Before(r.StdoutLastUpdateTime.Add(time.Second * 5)) {
+			if r.IsTemplate && time.Now().Before(r.StdoutLastUpdateTime.Add(time.Second*5)) {
 				continue
 			}
 
 			select {
-			case <-r.InputCancelCh:
+			case <-r.CusInCancelCh[uuid]:
 				break InputCancel
 			default:
-				switch templateOne.Type {
+				switch command.Type {
 				case "CMD":
-					commandByte = []byte(templateOne.Command)
+					commandByte = []byte(command.Command)
 				case "KEY":
 					if len(prevCommandByte) != 0 && byteEqual(convertToLF(prevCommandByte), convertToLF(r.Log[len(r.Log)-1].OutputByte)) {
 						continue
 					}
-					commandByte = append(commandByte, byte(templateOne.Code))
+					commandByte = append(commandByte, byte(command.Code))
 					r.InCh <- commandByte
 					prevCommandByte = commandByte
 					commandByte = []byte{}
 				case "OPT":
-					switch templateOne.Command {
+					switch command.Command {
 					case "disconnect":
 						close(r.InCancelCh)
 						close(r.OutCancelCh)
 						break
 					default:
-						if strings.Contains(templateOne.Command, "wait:") {
-							waitTime, err := strconv.Atoi(templateOne.Command[5:])
+						if strings.Contains(command.Command, "wait:") {
+							waitTime, err := strconv.Atoi(command.Command[5:])
 							if err != nil {
 								waitTime = 1
 							}
 							time.Sleep(time.Duration(waitTime) * time.Second)
-						} else if strings.Contains(templateOne.Command, "wait_str:") {
-							if len(prevCommandByte) != 0 && strings.Contains(string(r.Log[len(r.Log)-1].OutputByte), templateOne.Command[9:]) {
+						} else if strings.Contains(command.Command, "wait_str:") {
+							if len(prevCommandByte) != 0 && strings.Contains(string(r.Log[len(r.Log)-1].OutputByte), command.Command[9:]) {
 								continue
 							}
 						}
@@ -74,14 +65,34 @@ InputCancel:
 			}
 			break
 		}
-
 	}
+
+	return 0, nil
+}
+
+func (r *Remote) TemplateApply(templateStr string) error {
+	templateArray, err := LoadTemplate(templateStr)
+	r.IsTemplate = true
+	if err != nil {
+		return err
+	}
+	switch r.Type {
+	case 0:
+		go r.SSHShell()
+	}
+
+	sessionID, err := uuid.NewUUID()
+	if err != nil {
+		return err
+	}
+
+	r.Exec(sessionID, templateArray)
 
 	return nil
 }
 
-func LoadTemplate(templateData string) ([]command, error) {
-	var commands []command = []command{}
+func LoadTemplate(templateData string) ([]Command, error) {
+	var commands []Command = []Command{}
 
 	cmdParse, err := template.New("").Funcs(funcs).Parse(templateData)
 	if err != nil {
@@ -103,16 +114,16 @@ func LoadTemplate(templateData string) ([]command, error) {
 		}
 		switch text[0:5] {
 		case "CMD: ":
-			commands = append(commands, command{Type: "CMD", Command: text[5:]})
+			commands = append(commands, Command{Type: "CMD", Command: text[5:]})
 		case "OPT: ":
-			commands = append(commands, command{Type: "OPT", Command: text[5:]})
+			commands = append(commands, Command{Type: "OPT", Command: text[5:]})
 		case "KEY: ":
 			keyCode := 10
 			switch strings.Join(strings.Fields(text[5:]), "") {
 			case "enter":
 				keyCode = 10
 			}
-			commands = append(commands, command{Type: "KEY", Code: keyCode})
+			commands = append(commands, Command{Type: "KEY", Code: keyCode})
 		}
 	}
 	return commands, nil

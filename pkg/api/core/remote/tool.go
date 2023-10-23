@@ -2,8 +2,21 @@ package remote
 
 import (
 	"bufio"
+	"github.com/google/uuid"
 	"os"
 )
+
+func CreateCh(uuid2 uuid.UUID) map[uuid.UUID](chan []byte) {
+	outCh := make(map[uuid.UUID](chan []byte))
+	outCh[uuid2] = make(chan []byte)
+	return outCh
+}
+
+func CreateCusCancelCh(uuid2 uuid.UUID) map[uuid.UUID](chan struct{}) {
+	cusOutCancelCh := make(map[uuid.UUID](chan struct{}))
+	cusOutCancelCh[uuid2] = make(chan struct{})
+	return cusOutCancelCh
+}
 
 // convert to LF
 // CR: 13, LF: 10, CRLF: 1310

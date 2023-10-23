@@ -109,6 +109,9 @@ func (r *Remote) SSHShell() error {
 				n, err := stdout.Read(buf)
 				// Update time
 				r.StdoutLastUpdateTime = time.Now()
+				for _, outCh := range r.OutCh {
+					outCh <- buf[:n]
+				}
 				consoleLog += string(buf[:n])
 				r.Log[len(r.Log)-1].OutputByte = append(r.Log[len(r.Log)-1].OutputByte, buf[:n]...)
 				r.Log[len(r.Log)-1].OutputStr += string(buf[:n])
@@ -118,7 +121,6 @@ func (r *Remote) SSHShell() error {
 				if err != nil {
 					fmt.Println("[*normal* stdout finish]", err)
 					close(r.InCancelCh)
-					close(r.InputCancelCh)
 					break OutCancel
 				}
 			}
@@ -142,6 +144,14 @@ InCancel:
 			}...)
 			consoleLog += string(b)
 		}
+	}
+
+	for _, cusInCancelCh := range r.CusInCancelCh {
+		close(cusInCancelCh)
+	}
+
+	for _, cusOutCancelCh := range r.CusOutCancelCh {
+		close(cusOutCancelCh)
 	}
 
 	return nil
