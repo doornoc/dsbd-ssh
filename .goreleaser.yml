@@ -2,7 +2,8 @@ before:
   hooks:
     - go mod tidy
 builds:
-  - main: ./cmd/server/
+  - id: server
+    main: ./cmd/server/
     env:
       - CGO_ENABLED=0
     goos:
@@ -15,7 +16,8 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
-  - main: ./cmd/client/
+  - id: client
+    main: ./cmd/client/
     env:
       - CGO_ENABLED=0
     goos:
