@@ -2,3 +2,4 @@
 cmd/server/config
 pkg/api/core/remote/remote_test.go
 pkg/cmd/**/test.go
+dist/
