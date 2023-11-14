@@ -4,6 +4,7 @@ before:
 builds:
   - id: server
     main: ./cmd/server/
+    binary: dsbd-ssh-server
     env:
       - CGO_ENABLED=0
     goos:
@@ -18,6 +19,7 @@ builds:
         goarch: arm64
   - id: client
     main: ./cmd/client/
+    binary: dsbd-ssh-client
     env:
       - CGO_ENABLED=0
     goos:
@@ -32,8 +34,8 @@ builds:
         goarch: arm64
 
 archives:
-  - format: zip
-    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+  - format: binary
+    name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
 
 changelog:
   sort: asc
