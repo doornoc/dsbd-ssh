@@ -6,8 +6,10 @@ package remote;
 
 service RemoteService {
   rpc Connect(ConnectRequest) returns (ConnectResponse);
-  rpc DisConnect(DisconnectRequest) returns (DisconnectResponse);
+  rpc DisConnect(DisconnectRequest) returns (Result);
   rpc Remote (stream RemoteRequest) returns (stream RemoteResponse);
+  rpc RemoteInput (RemoteRequest) returns (Result);
+  rpc RemoteOutput (RemoteOutputRequest) returns (stream RemoteResponse);
 }
 
 enum Type {
@@ -36,10 +38,6 @@ message DisconnectRequest {
   string uuid = 1;
 }
 
-message DisconnectResponse {
-  bool ok = 1;
-}
-
 message RemoteRequest {
   string uuid = 1;
   bytes input = 2;
@@ -49,3 +47,14 @@ message RemoteResponse {
   string updateTime = 1;
   bytes output = 2;
 }
+
+message RemoteOutputRequest{
+  string uuid = 1;
+}
+
+message Result{
+  bool ok = 1;
+  string message = 2;
+}
+
+message Empty {}

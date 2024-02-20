@@ -34,11 +34,12 @@ InputCancel:
 				switch command.Type {
 				case "CMD":
 					commandByte = []byte(command.Command)
+					r.InCh <- commandByte
 				case "KEY":
 					if len(prevCommandByte) != 0 && byteEqual(convertToLF(prevCommandByte), convertToLF(r.Log[len(r.Log)-1].OutputByte)) {
 						continue
 					}
-					commandByte = append(commandByte, byte(command.Code))
+					commandByte = []byte{byte(command.Code)}
 					r.InCh <- commandByte
 					prevCommandByte = commandByte
 					commandByte = []byte{}

@@ -80,3 +80,52 @@ func Client(hostname string, port int, username string) error {
 
 	return nil
 }
+
+func ClientViaUUID(uuid string) error {
+	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("Can't connect with server %v", err)
+	}
+	// create stream
+	client := NewRemoteServiceClient(conn)
+	// create stream
+	remoteStream, err := client.Remote(context.Background())
+	if err != nil {
+		log.Fatalf("Open stream error: %v", err)
+	}
+
+	remoteStream.Send(&RemoteRequest{Uuid: uuid})
+
+	done := make(chan bool)
+
+	go func() {
+		for {
+			resp, err := remoteStream.Recv()
+			if err == io.EOF {
+				done <- true
+				return
+			}
+			if err != nil {
+				log.Fatalf("can not receive %v", err)
+			}
+			fmt.Printf("%s", string(resp.Output))
+		}
+	}()
+
+	input := make(chan string)
+	go remote.InputKeyLines(input)
+	for {
+		select {
+		case <-done:
+			break
+		case inputLine := <-input:
+			inputCmd := "CMD: " + inputLine + "\nKEY: enter"
+			remoteStream.Send(&RemoteRequest{
+				Uuid:  "",
+				Input: []byte(inputCmd),
+			})
+		}
+	}
+
+	return nil
+}
