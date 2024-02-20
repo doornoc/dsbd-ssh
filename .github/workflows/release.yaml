@@ -30,7 +30,7 @@ jobs:
       - name: Release tool
         uses: goreleaser/goreleaser-action@v3
         with:
-          args: release --clean
+          args: release --clean --skip-validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
