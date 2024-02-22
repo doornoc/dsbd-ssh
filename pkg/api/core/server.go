@@ -26,7 +26,7 @@ func NewServer() *server {
 func (s server) Connect(ctx context.Context, connectReq *ConnectRequest) (*ConnectResponse, error) {
 	uuid, err := uuid2.NewUUID()
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Unknown, "UUID Generate Error")
 	}
 
 	if _, isExist := Clients[uuid]; isExist {
@@ -59,6 +59,17 @@ func (s server) Connect(ctx context.Context, connectReq *ConnectRequest) (*Conne
 		go Clients[uuid].Remote.SSHShell()
 	}
 
+	// Close
+	go func() {
+		for {
+			select {
+			case <-Clients[uuid].Remote.ExitCh:
+				break
+			}
+		}
+		delete(Clients, uuid)
+	}()
+
 	return &ConnectResponse{
 		Uuid: uuid.String(),
 	}, nil
@@ -83,11 +94,12 @@ func (s server) Remote(stream RemoteService_RemoteServer) error {
 		return err
 	}
 	if remoteReq.Uuid == "" {
-		return fmt.Errorf("No uuid...\n")
+		return status.Errorf(codes.Unimplemented, fmt.Sprintf("No UUID..."))
 	}
 	remoteUUID := uuid2.MustParse(remoteReq.Uuid)
 	if _, isExist := Clients[remoteUUID]; !isExist {
-		return fmt.Errorf("UUID is not exists. The value is %#v", remoteUUID)
+		errorValue := fmt.Sprintf("UUID is not exists. The value is %#v", remoteUUID)
+		return status.Errorf(codes.Unimplemented, errorValue)
 	}
 
 	sessionID, err := uuid2.NewUUID()
@@ -96,9 +108,14 @@ func (s server) Remote(stream RemoteService_RemoteServer) error {
 	}
 
 	r := Clients[remoteUUID].Remote
+	if r.Error != nil {
+		return r.Error
+	}
+
 	r.OutCh[sessionID] = make(chan []byte)
 	r.CusInCancelCh[sessionID] = make(chan struct{})
 	r.CusOutCancelCh[sessionID] = make(chan struct{})
+	r.Error = nil
 	stream.Send(&RemoteResponse{
 		Output: []byte("Loading...\n"),
 	})
@@ -122,17 +139,17 @@ func (s server) Remote(stream RemoteService_RemoteServer) error {
 		}
 
 		if err != nil {
-			return err
+			return status.Error(codes.Unknown, fmt.Sprintf("[stream request]", err))
 		}
 
 		commands, err := remote.LoadTemplate(string(remoteReq.Input))
 		if err != nil {
-			return err
+			return status.Error(codes.Unknown, fmt.Sprintf("[load_template]", err))
 		}
 
 		_, err = r.Exec(sessionID, commands)
 		if err != nil {
-			return err
+			return status.Error(codes.Unknown, fmt.Sprintf("[exec]", err))
 		}
 	}
 
@@ -152,6 +169,9 @@ func (s server) RemoteInput(ctx context.Context, remoteInReq *RemoteRequest) (*R
 	}
 
 	r := Clients[remoteUUID].Remote
+	if r.Error != nil {
+		return nil, r.Error
+	}
 
 	commands, err := remote.LoadTemplate(string(remoteInReq.Input))
 	if err != nil {
@@ -167,7 +187,7 @@ func (s server) RemoteInput(ctx context.Context, remoteInReq *RemoteRequest) (*R
 
 func (s server) RemoteOutputRemoteOutput(req *RemoteOutputRequest, stream RemoteService_RemoteOutputServer) error {
 	if req.Uuid == "" {
-		return fmt.Errorf("No uuid...\n")
+		return status.Errorf(codes.Unimplemented, fmt.Sprintf("No UUID..."))
 	}
 	remoteUUID := uuid2.MustParse(req.Uuid)
 	if _, isExist := Clients[remoteUUID]; !isExist {
@@ -176,10 +196,14 @@ func (s server) RemoteOutputRemoteOutput(req *RemoteOutputRequest, stream Remote
 
 	sessionID, err := uuid2.NewUUID()
 	if err != nil {
-		return err
+		return status.Errorf(codes.Unknown, "UUID Generate Error")
 	}
 
 	r := Clients[remoteUUID].Remote
+	if r.Error != nil {
+		return r.Error
+	}
+
 	r.OutCh[sessionID] = make(chan []byte)
 	r.CusInCancelCh[sessionID] = make(chan struct{})
 	r.CusOutCancelCh[sessionID] = make(chan struct{})

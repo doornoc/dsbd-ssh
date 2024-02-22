@@ -23,9 +23,11 @@ type Remote struct {
 	OutCancelCh          chan struct{}
 	CusInCancelCh        map[uuid.UUID](chan struct{})
 	CusOutCancelCh       map[uuid.UUID](chan struct{})
+	ExitCh               chan struct{}
 	StdoutLastUpdateTime time.Time
 	IsTemplate           bool
 	Log                  []Log
+	Error                error
 }
 
 type Log struct {

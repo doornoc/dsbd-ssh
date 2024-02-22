@@ -30,3 +30,7 @@ type RemoteResult struct {
 	Admin       bool      `json:"admin"`
 	Message     string    `json:"message"`
 }
+
+func Close(uuid string) {
+
+}

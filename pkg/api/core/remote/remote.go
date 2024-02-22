@@ -3,11 +3,13 @@ package remote
 import (
 	"fmt"
 	"golang.org/x/crypto/ssh"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"strconv"
 	"time"
 )
 
-func (r *Remote) SSHShell() error {
+func (r *Remote) SSHShell() {
 	consoleLog := ""
 	sshConfig := &ssh.ClientConfig{
 		User: r.Device.User,
@@ -55,28 +57,28 @@ func (r *Remote) SSHShell() error {
 
 	client, err := ssh.Dial("tcp", r.Device.Hostname+":"+strconv.Itoa(int(r.Device.Port)), sshConfig)
 	if err != nil {
-		fmt.Println("[SSH Dial]", err)
-		return nil
+		r.Error = status.Error(codes.Unknown, fmt.Sprintf("[SSH Dial]", err))
+		return
 	}
 	defer client.Close()
 
 	session, err := client.NewSession()
 	if err != nil {
-		fmt.Println("[client.NewSession]", err)
-		return nil
+		r.Error = status.Error(codes.Unknown, fmt.Sprintf("[client.NewSession]", err))
+		return
 	}
 	defer session.Close()
 
 	stdin, err := session.StdinPipe()
 	if err != nil {
-		fmt.Println("[session.StdinPipe]", err)
-		return nil
+		r.Error = status.Error(codes.Unknown, fmt.Sprintf("[session.StdinPipe]", err))
+		return
 	}
 
 	stdout, err := session.StdoutPipe()
 	if err != nil {
-		fmt.Println("[session.StdoutPipe]", err)
-		return nil
+		r.Error = status.Error(codes.Unknown, fmt.Sprintf("[session.StdoutPipe]", err))
+		return
 	}
 
 	modes := ssh.TerminalModes{
@@ -94,14 +96,14 @@ func (r *Remote) SSHShell() error {
 	//}
 	err = session.RequestPty(term, 40, 100, modes)
 	if err != nil {
-		fmt.Println("[session.RequestPty]", err)
-		return nil
+		r.Error = status.Error(codes.Unknown, fmt.Sprintf("[session.RequestPty]", err))
+		return
 	}
 
 	err = session.Shell()
 	if err != nil {
-		fmt.Println("[session.Shell]", err)
-		return nil
+		r.Error = status.Error(codes.Unknown, fmt.Sprintf("[session.Shell]", err))
+		return
 	}
 
 	//stdoutBeforeTime := time.Now().Add(time.Second * -5)
@@ -172,5 +174,7 @@ InCancel:
 		close(cusOutCancelCh)
 	}
 
-	return nil
+	r.ExitCh <- struct{}{}
+
+	return
 }
