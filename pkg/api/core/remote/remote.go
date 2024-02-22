@@ -13,6 +13,15 @@ func (r *Remote) SSHShell() error {
 		User: r.Device.User,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(r.Device.Password),
+			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
+				if len(questions) == 0 {
+					return nil, nil
+				}
+				if len(questions) != 1 {
+					return nil, fmt.Errorf("too complex questionnaire: %#v", questions)
+				}
+				return []string{r.Device.Password}, nil
+			}),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		HostKeyAlgorithms: []string{
@@ -27,13 +36,22 @@ func (r *Remote) SSHShell() error {
 			ssh.KeyAlgoRSASHA256,
 			ssh.KeyAlgoRSASHA512,
 		},
+		Timeout: 30 * time.Second,
 	}
 
-	sshConfig.KeyExchanges = append(
-		sshConfig.KeyExchanges,
+	sshConfig.KeyExchanges = []string{
+		"diffie-hellman-group1-sha1",
+		"diffie-hellman-group14-sha1",
+		"diffie-hellman-group14-sha256",
+		"diffie-hellman-group16-sha512",
+		"ecdh-sha2-nistp256",
+		"ecdh-sha2-nistp384",
+		"ecdh-sha2-nistp521",
+		"curve25519-sha256@libssh.org",
+		"curve25519-sha256",
 		"diffie-hellman-group-exchange-sha256",
 		"diffie-hellman-group-exchange-sha1",
-	)
+	}
 
 	client, err := ssh.Dial("tcp", r.Device.Hostname+":"+strconv.Itoa(int(r.Device.Port)), sshConfig)
 	if err != nil {
