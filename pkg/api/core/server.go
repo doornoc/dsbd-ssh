@@ -37,11 +37,12 @@ func (s server) Connect(ctx context.Context, connectReq *ConnectRequest) (*Conne
 	Clients[uuid] = &Remote{
 		Remote: &remote.Remote{
 			Device: remote.Device{
-				Name:     uuid.String(),
-				Hostname: connectReq.Account.Hostname,
-				Port:     uint(connectReq.Account.Port),
-				User:     connectReq.Account.Username,
-				Password: connectReq.Account.Password,
+				Name:       uuid.String(),
+				Hostname:   connectReq.Account.Hostname,
+				Port:       uint(connectReq.Account.Port),
+				User:       connectReq.Account.Username,
+				Password:   connectReq.Account.Password,
+				PrivateKey: connectReq.Account.PrivateKey,
 			},
 			InCh:           make(chan []byte),
 			OutCh:          make(map[uuid2.UUID](chan []byte)),
@@ -81,8 +82,24 @@ func (s server) DisConnect(ctx context.Context, disConnectReq *DisconnectRequest
 		errorValue := fmt.Sprintf("UUID is not exists. The value is %#v", uuid)
 		return nil, status.Errorf(codes.Unimplemented, errorValue)
 	}
-	close(Clients[uuid].Remote.InCancelCh)
-	close(Clients[uuid].Remote.OutCancelCh)
+	var ok bool
+	select {
+	case _, ok = <-Clients[uuid].Remote.InCancelCh:
+	default:
+		ok = true
+	}
+	if ok {
+		close(Clients[uuid].Remote.InCancelCh)
+	}
+
+	select {
+	case _, ok = <-Clients[uuid].Remote.OutCancelCh:
+	default:
+		ok = true
+	}
+	if ok {
+		close(Clients[uuid].Remote.OutCancelCh)
+	}
 	delete(Clients, uuid)
 
 	return &Result{}, nil

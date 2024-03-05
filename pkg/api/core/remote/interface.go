@@ -6,12 +6,13 @@ import (
 )
 
 type Device struct {
-	Name     string `json:"name"`
-	Hostname string `json:"hostname"`
-	Port     uint   `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	OSType   string `json:"os_type"`
+	Name       string `json:"name"`
+	Hostname   string `json:"hostname"`
+	Port       uint   `json:"port"`
+	User       string `json:"user"`
+	Password   string `json:"password"`
+	PrivateKey string `json:"private_key"`
+	OSType     string `json:"os_type"`
 }
 
 type Remote struct {

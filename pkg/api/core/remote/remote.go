@@ -11,20 +11,32 @@ import (
 
 func (r *Remote) SSHShell() {
 	consoleLog := ""
+	authMethod := []ssh.AuthMethod{}
+	if r.Device.Password != "" {
+		authMethod = append(authMethod, ssh.Password(r.Device.Password))
+		authMethod = append(authMethod, ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
+			if len(questions) == 0 {
+				return nil, nil
+			}
+			if len(questions) != 1 {
+				return nil, fmt.Errorf("too complex questionnaire: %#v", questions)
+			}
+			return []string{r.Device.Password}, nil
+		}))
+	}
+
+	if r.Device.PrivateKey != "" {
+		signer, err := ssh.ParsePrivateKey([]byte(r.Device.PrivateKey))
+		if err != nil {
+			r.Error = status.Error(codes.InvalidArgument, fmt.Sprintf("[private key is wrong...]", err))
+			return
+		}
+		authMethod = append([]ssh.AuthMethod{ssh.PublicKeys(signer)}, authMethod...)
+	}
+
 	sshConfig := &ssh.ClientConfig{
-		User: r.Device.User,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(r.Device.Password),
-			ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
-				if len(questions) == 0 {
-					return nil, nil
-				}
-				if len(questions) != 1 {
-					return nil, fmt.Errorf("too complex questionnaire: %#v", questions)
-				}
-				return []string{r.Device.Password}, nil
-			}),
-		},
+		User:            r.Device.User,
+		Auth:            authMethod,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		HostKeyAlgorithms: []string{
 			ssh.KeyAlgoRSA,

@@ -23,6 +23,7 @@ message Account {
   uint32 port = 3;
   string username = 4;
   string password = 5;
+  string privateKey = 6;
 }
 
 message ConnectRequest {
