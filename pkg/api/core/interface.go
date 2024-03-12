@@ -11,9 +11,8 @@ var Clients = make(map[uuid.UUID]*Remote)
 var Broadcast = make(chan RemoteResult)
 
 type Remote struct {
-	Remote        *remote.Remote
-	StartAt       time.Time
-	LastUpdatedAt time.Time
+	Remote  *remote.Remote
+	StartAt time.Time
 }
 
 // websocket用

@@ -114,10 +114,11 @@ func ClientViaUUID(uuid string) error {
 
 	input := make(chan string)
 	go remote.InputKeyLines(input)
+InputLoop:
 	for {
 		select {
 		case <-done:
-			break
+			break InputLoop
 		case inputLine := <-input:
 			inputCmd := "CMD: " + inputLine + "\nKEY: enter"
 			remoteStream.Send(&RemoteRequest{

@@ -145,13 +145,14 @@ func (r *Remote) SSHShell() {
 					outCh <- buf[:n]
 				}
 				consoleLog += string(buf[:n])
+				r.LastUpdatedAt = time.Now()
 				r.Log[len(r.Log)-1].OutputByte = append(r.Log[len(r.Log)-1].OutputByte, buf[:n]...)
 				r.Log[len(r.Log)-1].OutputStr += string(buf[:n])
 
 				//log.Printf("\n[%d]> %d\n", n, string(buf[:n]))
-				fmt.Printf(string(buf[:n]))
+				//fmt.Printf(string(buf[:n]))
 				if err != nil {
-					fmt.Println("[*normal* stdout finish]", err)
+					//fmt.Println("[*normal* stdout finish]", err)
 					close(r.InCancelCh)
 					break OutCancel
 				}
@@ -186,7 +187,6 @@ InCancel:
 		close(cusOutCancelCh)
 	}
 
-	r.ExitCh <- struct{}{}
-
+	close(r.ExitCh)
 	return
 }

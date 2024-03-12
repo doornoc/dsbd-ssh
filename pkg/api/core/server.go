@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"runtime"
 	"time"
 )
 
@@ -44,15 +45,16 @@ func (s server) Connect(ctx context.Context, connectReq *ConnectRequest) (*Conne
 				Password:   connectReq.Account.Password,
 				PrivateKey: connectReq.Account.PrivateKey,
 			},
+			ExitCh:         make(chan struct{}),
 			InCh:           make(chan []byte),
 			OutCh:          make(map[uuid2.UUID](chan []byte)),
 			InCancelCh:     make(chan struct{}),
 			OutCancelCh:    make(chan struct{}),
 			CusInCancelCh:  make(map[uuid2.UUID](chan struct{})),
 			CusOutCancelCh: make(map[uuid2.UUID](chan struct{})),
+			LastUpdatedAt:  time.Now(),
 		},
-		StartAt:       time.Time{},
-		LastUpdatedAt: time.Time{},
+		StartAt: time.Time{},
 	}
 
 	switch connectReq.Account.Type {
@@ -62,10 +64,17 @@ func (s server) Connect(ctx context.Context, connectReq *ConnectRequest) (*Conne
 
 	// Close
 	go func() {
+	ConnectCancel:
 		for {
 			select {
 			case <-Clients[uuid].Remote.ExitCh:
-				break
+				break ConnectCancel
+			default:
+				// CPUを使いすぎるので、1s待つ
+				time.Sleep(1 * time.Second)
+				if Clients[uuid].Remote.LastUpdatedAt.Add(time.Minute * 5).Before(time.Now()) {
+					break ConnectCancel
+				}
 			}
 		}
 		delete(Clients, uuid)
@@ -138,9 +147,11 @@ func (s server) Remote(stream RemoteService_RemoteServer) error {
 	})
 	go func() {
 		for {
+			// CPUを使いすぎるので、100ms待つ
+			time.Sleep(100 * time.Millisecond)
 			select {
 			case <-r.CusOutCancelCh[sessionID]:
-				break
+				return
 			case outCh := <-r.OutCh[sessionID]:
 				stream.Send(&RemoteResponse{
 					Output: outCh,
@@ -150,23 +161,30 @@ func (s server) Remote(stream RemoteService_RemoteServer) error {
 	}()
 
 	for {
-		remoteReq, err = stream.Recv()
-		if err == io.EOF {
-			continue
-		}
+		// CPUを使いすぎるので、100ms待つ
+		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-r.CusInCancelCh[sessionID]:
+			return status.Error(codes.Canceled, fmt.Sprintf("Cancel"))
+		default:
+			remoteReq, err = stream.Recv()
+			if err == io.EOF {
+				continue
+			}
 
-		if err != nil {
-			return status.Error(codes.Unknown, fmt.Sprintf("[stream request]", err))
-		}
+			if err != nil {
+				return status.Error(codes.Unknown, fmt.Sprintf("[stream request]", err))
+			}
 
-		commands, err := remote.LoadTemplate(string(remoteReq.Input))
-		if err != nil {
-			return status.Error(codes.Unknown, fmt.Sprintf("[load_template]", err))
-		}
+			commands, err := remote.LoadTemplate(string(remoteReq.Input))
+			if err != nil {
+				return status.Error(codes.Unknown, fmt.Sprintf("[load_template]", err))
+			}
 
-		_, err = r.Exec(sessionID, commands)
-		if err != nil {
-			return status.Error(codes.Unknown, fmt.Sprintf("[exec]", err))
+			_, err = r.Exec(sessionID, commands)
+			if err != nil {
+				return status.Error(codes.Unknown, fmt.Sprintf("[exec]", err))
+			}
 		}
 	}
 
@@ -227,23 +245,22 @@ func (s server) RemoteOutputRemoteOutput(req *RemoteOutputRequest, stream Remote
 	stream.Send(&RemoteResponse{
 		Output: []byte("Loading...\n"),
 	})
-	go func() {
-		for {
-			select {
-			case <-r.CusOutCancelCh[sessionID]:
-				break
-			case outCh := <-r.OutCh[sessionID]:
-				stream.Send(&RemoteResponse{
-					Output: outCh,
-				})
-			}
+	for {
+		select {
+		case <-r.CusOutCancelCh[sessionID]:
+			return status.Error(codes.Canceled, fmt.Sprintf("Cancel"))
+		case outCh := <-r.OutCh[sessionID]:
+			stream.Send(&RemoteResponse{
+				Output: outCh,
+			})
 		}
-	}()
+	}
 
 	return nil
 }
 
 func Server() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	listenPort, err := net.Listen("tcp", fmt.Sprintf(":%d", tool.Port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)

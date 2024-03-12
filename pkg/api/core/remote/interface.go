@@ -29,6 +29,7 @@ type Remote struct {
 	IsTemplate           bool
 	Log                  []Log
 	Error                error
+	LastUpdatedAt        time.Time
 }
 
 type Log struct {
