@@ -19,12 +19,11 @@ type Remote struct {
 	Type                 uint   //0:ssh, 1:telnet
 	Device               Device `json:"device"`
 	InCh                 chan []byte
-	OutCh                map[uuid.UUID](chan []byte)
 	InCancelCh           chan struct{}
 	OutCancelCh          chan struct{}
-	CusInCancelCh        map[uuid.UUID](chan struct{})
-	CusOutCancelCh       map[uuid.UUID](chan struct{})
+	CusCh                map[uuid.UUID]*CusChannel
 	ExitCh               chan struct{}
+	ClosedCh             ClosedChStatus
 	StdoutLastUpdateTime time.Time
 	IsTemplate           bool
 	Log                  []Log
@@ -44,4 +43,22 @@ type Command struct {
 	Code    int
 	Option1 string
 	Option2 string
+}
+
+type CusChannel struct {
+	OutCh          chan []byte
+	CusInCancelCh  chan struct{}
+	CusOutCancelCh chan struct{}
+	ClosedCusCh    *ClosedCusChStatus
+}
+
+type ClosedChStatus struct {
+	ClosedInCancelCh  bool
+	ClosedOutCancelCh bool
+	CloseExitCh       bool
+}
+type ClosedCusChStatus struct {
+	ClosedOutCh          bool
+	ClosedCusInCancelCh  bool
+	ClosedCusOutCancelCh bool
 }

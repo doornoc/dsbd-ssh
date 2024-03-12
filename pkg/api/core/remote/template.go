@@ -28,7 +28,8 @@ InputCancel:
 			}
 
 			select {
-			case <-r.CusInCancelCh[uuid]:
+			case <-r.CusCh[uuid].CusInCancelCh:
+				r.CusCh[uuid].ClosedCusCh.ClosedCusInCancelCh = true
 				break InputCancel
 			default:
 				switch command.Type {
@@ -47,7 +48,9 @@ InputCancel:
 					switch command.Command {
 					case "disconnect":
 						close(r.InCancelCh)
+						r.ClosedCh.ClosedInCancelCh = true
 						close(r.OutCancelCh)
+						r.ClosedCh.ClosedOutCancelCh = true
 						break
 					default:
 						if strings.Contains(command.Command, "wait:") {

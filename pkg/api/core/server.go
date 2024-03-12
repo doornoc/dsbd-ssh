@@ -45,14 +45,13 @@ func (s server) Connect(ctx context.Context, connectReq *ConnectRequest) (*Conne
 				Password:   connectReq.Account.Password,
 				PrivateKey: connectReq.Account.PrivateKey,
 			},
-			ExitCh:         make(chan struct{}),
-			InCh:           make(chan []byte),
-			OutCh:          make(map[uuid2.UUID](chan []byte)),
-			InCancelCh:     make(chan struct{}),
-			OutCancelCh:    make(chan struct{}),
-			CusInCancelCh:  make(map[uuid2.UUID](chan struct{})),
-			CusOutCancelCh: make(map[uuid2.UUID](chan struct{})),
-			LastUpdatedAt:  time.Now(),
+			ExitCh:        make(chan struct{}),
+			InCh:          make(chan []byte),
+			InCancelCh:    make(chan struct{}),
+			OutCancelCh:   make(chan struct{}),
+			ClosedCh:      remote.ClosedChStatus{ClosedInCancelCh: false, ClosedOutCancelCh: false, CloseExitCh: false},
+			CusCh:         map[uuid2.UUID]*remote.CusChannel{},
+			LastUpdatedAt: time.Now(),
 		},
 		StartAt: time.Time{},
 	}
@@ -68,16 +67,24 @@ func (s server) Connect(ctx context.Context, connectReq *ConnectRequest) (*Conne
 		for {
 			select {
 			case <-Clients[uuid].Remote.ExitCh:
-				break ConnectCancel
+				if _, isExist := Clients[uuid]; isExist {
+					break ConnectCancel
+				} else {
+					return
+				}
 			default:
 				// CPUを使いすぎるので、1s待つ
-				time.Sleep(1 * time.Second)
-				if Clients[uuid].Remote.LastUpdatedAt.Add(time.Minute * 5).Before(time.Now()) {
+				for i := 0; i < 10; i++ {
+					time.Sleep(1 * time.Second)
+				}
+				if _, isExist := Clients[uuid]; isExist && Clients[uuid].Remote.LastUpdatedAt.Add(time.Minute*5).Before(time.Now()) {
 					break ConnectCancel
+				} else if !isExist {
+					return
 				}
 			}
 		}
-		delete(Clients, uuid)
+		CloseCh(uuid)
 	}()
 
 	return &ConnectResponse{
@@ -91,25 +98,7 @@ func (s server) DisConnect(ctx context.Context, disConnectReq *DisconnectRequest
 		errorValue := fmt.Sprintf("UUID is not exists. The value is %#v", uuid)
 		return nil, status.Errorf(codes.Unimplemented, errorValue)
 	}
-	var ok bool
-	select {
-	case _, ok = <-Clients[uuid].Remote.InCancelCh:
-	default:
-		ok = true
-	}
-	if ok {
-		close(Clients[uuid].Remote.InCancelCh)
-	}
-
-	select {
-	case _, ok = <-Clients[uuid].Remote.OutCancelCh:
-	default:
-		ok = true
-	}
-	if ok {
-		close(Clients[uuid].Remote.OutCancelCh)
-	}
-	delete(Clients, uuid)
+	CloseCh(uuid)
 
 	return &Result{}, nil
 
@@ -138,9 +127,12 @@ func (s server) Remote(stream RemoteService_RemoteServer) error {
 		return r.Error
 	}
 
-	r.OutCh[sessionID] = make(chan []byte)
-	r.CusInCancelCh[sessionID] = make(chan struct{})
-	r.CusOutCancelCh[sessionID] = make(chan struct{})
+	r.CusCh[sessionID] = &remote.CusChannel{
+		OutCh:          make(chan []byte),
+		CusInCancelCh:  make(chan struct{}),
+		CusOutCancelCh: make(chan struct{}),
+		ClosedCusCh:    &remote.ClosedCusChStatus{ClosedOutCh: false, ClosedCusInCancelCh: false, ClosedCusOutCancelCh: false},
+	}
 	r.Error = nil
 	stream.Send(&RemoteResponse{
 		Output: []byte("Loading...\n"),
@@ -150,9 +142,9 @@ func (s server) Remote(stream RemoteService_RemoteServer) error {
 			// CPUを使いすぎるので、100ms待つ
 			time.Sleep(100 * time.Millisecond)
 			select {
-			case <-r.CusOutCancelCh[sessionID]:
+			case <-r.CusCh[sessionID].CusOutCancelCh:
 				return
-			case outCh := <-r.OutCh[sessionID]:
+			case outCh := <-r.CusCh[sessionID].OutCh:
 				stream.Send(&RemoteResponse{
 					Output: outCh,
 				})
@@ -164,7 +156,7 @@ func (s server) Remote(stream RemoteService_RemoteServer) error {
 		// CPUを使いすぎるので、100ms待つ
 		time.Sleep(100 * time.Millisecond)
 		select {
-		case <-r.CusInCancelCh[sessionID]:
+		case <-r.CusCh[sessionID].CusInCancelCh:
 			return status.Error(codes.Canceled, fmt.Sprintf("Cancel"))
 		default:
 			remoteReq, err = stream.Recv()
@@ -208,6 +200,14 @@ func (s server) RemoteInput(ctx context.Context, remoteInReq *RemoteRequest) (*R
 		return nil, r.Error
 	}
 
+	r.CusCh[sessionID] = &remote.CusChannel{
+		OutCh:          make(chan []byte),
+		CusInCancelCh:  make(chan struct{}),
+		CusOutCancelCh: make(chan struct{}),
+		ClosedCusCh:    &remote.ClosedCusChStatus{ClosedOutCh: false, ClosedCusInCancelCh: false, ClosedCusOutCancelCh: false},
+	}
+	defer delete(r.CusCh, sessionID)
+
 	commands, err := remote.LoadTemplate(string(remoteInReq.Input))
 	if err != nil {
 		return &Result{Ok: false}, err
@@ -239,17 +239,21 @@ func (s server) RemoteOutputRemoteOutput(req *RemoteOutputRequest, stream Remote
 		return r.Error
 	}
 
-	r.OutCh[sessionID] = make(chan []byte)
-	r.CusInCancelCh[sessionID] = make(chan struct{})
-	r.CusOutCancelCh[sessionID] = make(chan struct{})
+	r.CusCh[sessionID] = &remote.CusChannel{
+		OutCh:          make(chan []byte),
+		CusInCancelCh:  make(chan struct{}),
+		CusOutCancelCh: make(chan struct{}),
+		ClosedCusCh:    &remote.ClosedCusChStatus{ClosedOutCh: false, ClosedCusInCancelCh: false, ClosedCusOutCancelCh: false},
+	}
 	stream.Send(&RemoteResponse{
 		Output: []byte("Loading...\n"),
 	})
 	for {
 		select {
-		case <-r.CusOutCancelCh[sessionID]:
+		case <-r.CusCh[sessionID].CusOutCancelCh:
+			delete(r.CusCh, sessionID)
 			return status.Error(codes.Canceled, fmt.Sprintf("Cancel"))
-		case outCh := <-r.OutCh[sessionID]:
+		case outCh := <-r.CusCh[sessionID].OutCh:
 			stream.Send(&RemoteResponse{
 				Output: outCh,
 			})

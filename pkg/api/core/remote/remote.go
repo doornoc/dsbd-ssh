@@ -136,13 +136,16 @@ func (r *Remote) SSHShell() {
 		for err == nil {
 			select {
 			case <-r.OutCancelCh:
+				r.ClosedCh.ClosedOutCancelCh = true
 				break OutCancel
 			default:
 				n, err := stdout.Read(buf)
 				// Update time
 				r.StdoutLastUpdateTime = time.Now()
-				for _, outCh := range r.OutCh {
-					outCh <- buf[:n]
+				for _, cusCh := range r.CusCh {
+					if !cusCh.ClosedCusCh.ClosedCusOutCancelCh {
+						cusCh.OutCh <- buf[:n]
+					}
 				}
 				consoleLog += string(buf[:n])
 				r.LastUpdatedAt = time.Now()
@@ -154,6 +157,7 @@ func (r *Remote) SSHShell() {
 				if err != nil {
 					//fmt.Println("[*normal* stdout finish]", err)
 					close(r.InCancelCh)
+					r.ClosedCh.ClosedInCancelCh = true
 					break OutCancel
 				}
 			}
@@ -165,6 +169,7 @@ InCancel:
 	for {
 		select {
 		case <-r.InCancelCh:
+			r.ClosedCh.ClosedInCancelCh = true
 			break InCancel
 		case b := <-r.InCh:
 			stdin.Write(b)
@@ -179,14 +184,20 @@ InCancel:
 		}
 	}
 
-	for _, cusInCancelCh := range r.CusInCancelCh {
-		close(cusInCancelCh)
+	for _, cusCh := range r.CusCh {
+		if !cusCh.ClosedCusCh.ClosedCusInCancelCh {
+			close(cusCh.CusInCancelCh)
+			cusCh.ClosedCusCh.ClosedCusInCancelCh = true
+		}
+		if !cusCh.ClosedCusCh.ClosedCusOutCancelCh {
+			close(cusCh.CusOutCancelCh)
+			cusCh.ClosedCusCh.ClosedCusOutCancelCh = true
+		}
 	}
 
-	for _, cusOutCancelCh := range r.CusOutCancelCh {
-		close(cusOutCancelCh)
+	if !r.ClosedCh.CloseExitCh {
+		close(r.ExitCh)
+		r.ClosedCh.CloseExitCh = true
 	}
-
-	close(r.ExitCh)
 	return
 }

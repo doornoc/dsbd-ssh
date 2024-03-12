@@ -33,3 +33,36 @@ type RemoteResult struct {
 func Close(uuid string) {
 
 }
+
+func CloseCh(uuid uuid.UUID) {
+
+	if !Clients[uuid].Remote.ClosedCh.ClosedInCancelCh {
+		close(Clients[uuid].Remote.InCancelCh)
+		Clients[uuid].Remote.ClosedCh.ClosedInCancelCh = true
+	}
+	if !Clients[uuid].Remote.ClosedCh.ClosedOutCancelCh {
+		close(Clients[uuid].Remote.OutCancelCh)
+		Clients[uuid].Remote.ClosedCh.ClosedOutCancelCh = true
+	}
+
+	for _, cusCh := range Clients[uuid].Remote.CusCh {
+		if !cusCh.ClosedCusCh.ClosedCusInCancelCh {
+			close(cusCh.CusInCancelCh)
+			cusCh.ClosedCusCh.ClosedCusInCancelCh = true
+		}
+		if !cusCh.ClosedCusCh.ClosedCusOutCancelCh {
+			close(cusCh.CusOutCancelCh)
+			cusCh.ClosedCusCh.ClosedCusOutCancelCh = true
+		}
+		if !cusCh.ClosedCusCh.ClosedOutCh {
+			close(cusCh.OutCh)
+			cusCh.ClosedCusCh.ClosedOutCh = true
+		}
+	}
+
+	if !Clients[uuid].Remote.ClosedCh.CloseExitCh {
+		close(Clients[uuid].Remote.ExitCh)
+		Clients[uuid].Remote.ClosedCh.CloseExitCh = true
+	}
+	delete(Clients, uuid)
+}
