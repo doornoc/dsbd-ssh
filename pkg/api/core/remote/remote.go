@@ -156,8 +156,10 @@ func (r *Remote) SSHShell() {
 				//fmt.Printf(string(buf[:n]))
 				if err != nil {
 					//fmt.Println("[*normal* stdout finish]", err)
-					close(r.InCancelCh)
-					r.ClosedCh.ClosedInCancelCh = true
+					if !r.ClosedCh.ClosedInCancelCh {
+						close(r.InCancelCh)
+						r.ClosedCh.ClosedInCancelCh = true
+					}
 					break OutCancel
 				}
 			}
